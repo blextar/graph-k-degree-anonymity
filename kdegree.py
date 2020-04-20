@@ -1,4 +1,5 @@
-# Based on https://dl.acm.org/doi/10.1145/1376616.1376629
+# Based on Liu & Terzi's k-degree anonymity:
+# [1] https://dl.acm.org/doi/10.1145/1376616.1376629
 
 import networkx as nx
 import numpy as np
@@ -6,61 +7,75 @@ import random as rn
 
 def get_degree_sequence(G):
     return [d for n, d in G.degree()]
-    
+
+# "degree anonymization cost" as defined in Section 4 of [1] 
 def assignment_cost(degree_sequence):
     return np.sum(np.array(degree_sequence[0])-np.array(degree_sequence))
     
-# NOTE: not implemented yet!!
-def degree_anonymiser(degree_sequence,k):
+'''
+def dp_degree_anonymiser(degree_sequence,k):
     l = len(degree_sequence)
     if l < 2*k:
         anonymisation_cost = assignment_cost(degree_sequence)
     else:
         anonymisation_cost = np.min([0,assignment_cost(degree_sequence)])
     return anonymised_degree_sequence
-    
+'''
+
+# The greedy algorithm described in Section 4 of [1] 
 def greedy_degree_anonymiser(degree_sequence,k):
     # create a k-anonymomus group with all nodes having degree equal to the largest in the group
     # degree_sequence is sorted, so the largest element is the first one
-    largest_degree = degree_sequence[0]
-
+    group_degree = degree_sequence[0]
+    n = len(degree_sequence)
+        
     # if there are less than 2*k nodes left to anonymise, group them together and finish
-    if len(degree_sequence) < 2*k:
-        anonymised_sequence = [largest_degree]*len(degree_sequence)
+    if n < 2*k:
+        anonymised_sequence = [group_degree]*n
         return anonymised_sequence
-    
     # otherwise start a new group
-    anonymised_sequence = [largest_degree]*k
-    
+    anonymised_sequence = [group_degree]*k
     # then check if we can add another node to the current group or if it's better to create a new group
-    c_merge = degree_sequence[0]-degree_sequence[k]+assignment_cost(degree_sequence[k+1:2*k])
-    c_new = assignment_cost(degree_sequence[k:2*k-1])
-    
+    # cost of grouping the next k nodes together (we know we have at least k nodes left, thanks to the IF above)
+    c_new = assignment_cost(degree_sequence[k:2*k])
+    # number of remaining nodes if we add the next one to the current group
+    m = n-k-1
+    # if we don't have enough remaining nodes, merging this node means merging all of them 
+    if m < k:
+        c_merge = np.sum(np.array(group_degree)-np.array(degree_sequence[k:]))
+    # otherwise the cost of merging is the cost of merging only this node + the cost of grouping the rest
+    else:
+        c_merge = group_degree-degree_sequence[k]+assignment_cost(degree_sequence[k+1:2*k+1])
     # keep adding nodes while you can
     i = 0
+    # while it's cheaper to merge the i-th node
     while c_new >= c_merge:
-        # add current node
-        anonymised_sequence = anonymised_sequence + [largest_degree]
+        # add i-th node to the current group
+        # merge all nodes and return, if we don't have enough to proceed afterwards
+        if m < k:
+            anonymised_sequence = anonymised_sequence + [group_degree]*(m+1)
+            return anonymised_sequence
+        else:
+            anonymised_sequence = anonymised_sequence + [group_degree]
         # checking the next node now..
         i = i+1
-        # if there is only one node left, add it to the group
-        if k+i == len(degree_sequence)-1:
-            anonymised_sequence = anonymised_sequence + [largest_degree]    
-            return anonymised_sequence
-        if 2*k+i >= len(degree_sequence):
-            c_merge = np.sum(np.array(largest_degree)-np.array(degree_sequence[k+i:]))
-            c_new = assignment_cost(degree_sequence[k+i:])
-            if c_new >= c_merge:
-                anonymised_sequence = anonymised_sequence + [largest_degree]*len(degree_sequence[k+i:])
-                return anonymised_sequence
+        # number of remaining nodes after we added one to the current group
+        m = n-k-1-i
+        # cost of creating a new group starting from i
+        c_new = assignment_cost(degree_sequence[k+i:2*k+i])
+        # if there are not enough nodes left to potentially form a new group
+        if m < k:
+            # cost of merging i and all the other nodes to the current group
+            c_merge = np.sum(np.array(group_degree)-np.array(degree_sequence[k+i:]))
+        # otherwise
         else:
-            c_merge = largest_degree-degree_sequence[k+i]+assignment_cost(degree_sequence[k+i+1:2*k+i])
-            c_new = assignment_cost(degree_sequence[k+i:2*k+i-1])
-        
+            # cost of merging i and starting a new group from k+1
+            c_merge = group_degree-degree_sequence[k+i]+assignment_cost(degree_sequence[k+i+1:2*k+i+1])
     # when you stop adding new nodes, make a recursive call starting a new group on the remaining sequence
     anonymised_sequence = anonymised_sequence + greedy_degree_anonymiser(degree_sequence[k+i:],k)
     return anonymised_sequence
 
+# Algorithm 1 in [1]
 def construct_graph(degree_sequence):
     n = len(degree_sequence)
     # if sum of the degree sequence is odd, the degree sequence isn't realisable
@@ -88,9 +103,8 @@ def construct_graph(degree_sequence):
         
         # gather all the vertices that need more edges 
         remaining_vertices = [i for i,vertex in enumerate(vd) if vertex[1] > 0]
-        # shuffle them
-        idx = remaining_vertices[rn.randrange(len(remaining_vertices))]
         # pick a random one
+        idx = remaining_vertices[rn.randrange(len(remaining_vertices))]
         v = vd[idx][0]
         
         # iterate over all the vertices (vd is sorted from largest to smallest)
@@ -107,8 +121,9 @@ def construct_graph(degree_sequence):
             vd[i] = (u[0],u[1] - 1)
             # keep track of how many edges we added
             vd[idx] = (vd[idx][0],vd[idx][1] - 1)
-            
-def find_max_swap(G,edges_orig):
+
+# Section 6.1 in [1]
+def find_max_swap(G,target_edges):
     edges = G.edges
     num_samples = int(np.floor(np.log(len(edges))))
     selected_edges = rn.sample(edges, k=num_samples) #change to k=num_samples
@@ -119,43 +134,46 @@ def find_max_swap(G,edges_orig):
             e2 = selected_edges[j]
             if (e1[0],e2[0]) not in edges and (e1[1],e2[1]) not in edges:
                 c = 0
-                c = c - 1 if e1 in edges_orig else c
-                c = c - 1 if e2 in edges_orig else c
-                c = c + 1 if (e1[0],e2[0]) in edges_orig else c
-                c = c + 1 if (e1[1],e2[1]) in edges_orig else c
+                c = c - 1 if e1 in target_edges else c
+                c = c - 1 if e2 in target_edges else c
+                c = c + 1 if (e1[0],e2[0]) in target_edges else c
+                c = c + 1 if (e1[1],e2[1]) in target_edges else c
                 if c > best_swap[0]:
                     best_swap = (c,(e1,e2,(e1[0],e2[0]),(e1[1],e2[1])))
             if (e1[0],e2[1]) not in edges and (e1[1],e2[0]) not in edges:
                 c = 0
-                c = c - 1 if e1 in edges_orig else c
-                c = c - 1 if e2 in edges_orig else c
-                c = c + 1 if (e1[0],e2[1]) in edges_orig else c
-                c = c + 1 if (e1[1],e2[0]) in edges_orig else c
+                c = c - 1 if e1 in target_edges else c
+                c = c - 1 if e2 in target_edges else c
+                c = c + 1 if (e1[0],e2[1]) in target_edges else c
+                c = c + 1 if (e1[1],e2[0]) in target_edges else c
                 if c > best_swap[0]:
                     best_swap = (c,(e1,e2,(e1[0],e2[1]),(e1[1],e2[0])))
     return best_swap
-    
-def greedy_swap(G, G_orig):
-    edges_orig = G_orig.edges()
-    G_new = G.copy()
-    (c, (e1, e2, ee1, ee2)) = find_max_swap(G_new,edges_orig)
-    while c > 0:
-        G_new.remove_edge(e1[0],e1[1])
-        G_new.remove_edge(e2[0],e2[1])
-        G_new.add_edge(ee1[0],ee1[1])
-        G_new.add_edge(ee2[0],ee2[1])
-        (c, (e1, e2, ee1, ee2)) = find_max_swap(G_new,edges_orig)
-    return G_new
-    
-def priority(degree_sequence,G_orig):
-    
-    target_edges = G_orig.edges()
 
+# Section 6.1 in [1]
+def greedy_swap(G, target_edges):
+    result = find_max_swap(G,target_edges)
+    if result[1] is None:
+        print("Sorry, I couldn't find any good edge swap")
+        return G
+    else:
+        (c, (e1, e2, ee1, ee2)) = result
+    while c > 0:
+        G.remove_edge(e1[0],e1[1])
+        G.remove_edge(e2[0],e2[1])
+        G.add_edge(ee1[0],ee1[1])
+        G.add_edge(ee2[0],ee2[1])
+        (c, (e1, e2, ee1, ee2)) = find_max_swap(G,target_edges)
+    return G
+
+# Section 6.2 in [1]
+def priority(degree_sequence,target_edges):
+    
     n = len(degree_sequence)
     # if sum of the degree sequence is odd, the degree sequence isn't realisable
     if np.sum(degree_sequence) % 2 != 0:
         return None
-    
+            
     G = nx.empty_graph(n)
     
     # transform list of degrees in list of (vertex, degree)
@@ -179,11 +197,9 @@ def priority(degree_sequence,G_orig):
         remaining_vertices = [i for i,vertex in enumerate(vd) if vertex[1] > 0]
         # pick a random one
         idx = remaining_vertices[rn.randrange(len(remaining_vertices))]
-        # pick a random one
         v = vd[idx][0]
                 
-        second_choices = list()
-        # iterate over all the vertices u such that (u,v) is an edge in the original graph
+        # iterate over all the degree-sorted vertices u such that (u,v) is an edge in the original graph
         for i,u in enumerate(vd):
             # stop when we added v_d edges
             if vd[idx][1] == 0:
@@ -191,36 +207,39 @@ def priority(degree_sequence,G_orig):
             # don't add self-loops
             if u[0] == v:
                 continue
-            # add an edge
+            # add the edge if this exists also in the original graph
+            # we do an additional check for the degree of u to be > 0 because we may have skipped other edges not
+            # belonging to G but that would have prevented us from using u and making its degree negative
             if (v,u[0]) in target_edges and u[1] > 0:
                 G.add_edge(v,u[0])
                 # decrease the degree of the connected vertex
                 vd[i] = (u[0],u[1] - 1)
                 # keep track of how many edges we added
                 vd[idx] = (vd[idx][0],vd[idx][1] - 1)
-            else:
-                second_choices.append(i)
-        # now consider also other vertices in vd, if we still need to add edges
-        for u_idx in second_choices:
+
+        # iterate over all the degree-sorted vertices u such that (u,v) is NOT an edge in the original graph
+        for i,u in enumerate(vd):
             # stop when we added v_d edges
             if vd[idx][1] == 0:
                 break
             # don't add self-loops
-            if vd[u_idx][0] == v:
+            if u[0] == v:
                 continue
-            # add an edge
-            G.add_edge(v,vd[u_idx][0])
-            # decrease the degree of the connected vertex
-            vd[u_idx] = (vd[u_idx][0],vd[u_idx][1] - 1)
-            # keep track of how many edges we added
-            vd[idx] = (vd[idx][0],vd[idx][1] - 1)
-            
+            # now add edges that are not in the original graph
+            if (v,u[0]) not in target_edges:
+                G.add_edge(v,u[0])
+                # decrease the degree of the connected vertex
+                vd[i] = (u[0],u[1] - 1)
+                # keep track of how many edges we added
+                vd[idx] = (vd[idx][0],vd[idx][1] - 1)
+
+# Anonymise G given a value of k. Uses Probing (Algorithm 2 in [1])
 def graph_anonymiser(G,k,with_priority=True):
     degree_sequence = get_degree_sequence(G)
     degree_sequence.sort(reverse=True)
     anonymised_sequence = greedy_degree_anonymiser(degree_sequence,k)
     if with_priority:
-        Ga = priority(anonymised_sequence,G)
+        Ga = priority(anonymised_sequence,G.edges())
     else:
         Ga = construct_graph(anonymised_sequence)
     while Ga is None:
@@ -231,7 +250,7 @@ def graph_anonymiser(G,k,with_priority=True):
         degree_sequence.sort(reverse=True)
         anonymised_sequence = greedy_degree_anonymiser(degree_sequence,k)
         if with_priority:
-            Ga = priority(anonymised_sequence,G)
+            Ga = priority(anonymised_sequence,G.edges())
         else:
             Ga = construct_graph(anonymised_sequence)
     return Ga
