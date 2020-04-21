@@ -57,7 +57,7 @@ def greedy_degree_anonymiser(degree_sequence,k):
             return anonymised_sequence
         else:
             anonymised_sequence = anonymised_sequence + [group_degree]
-        # checking the next node now..
+        # checking the next node now
         i = i+1
         # number of remaining nodes after we added one to the current group
         m = n-k-1-i
@@ -126,7 +126,7 @@ def construct_graph(degree_sequence):
 def find_max_swap(G,target_edges):
     edges = G.edges
     num_samples = int(np.floor(np.log(len(edges))))
-    selected_edges = rn.sample(edges, k=num_samples) #change to k=num_samples
+    selected_edges = rn.sample(edges, k=num_samples) #change to k=num_samples for better performance but slower running time
     best_swap = (-1e8,None)
     for i in range(len(selected_edges)-1):
         for j in range(i+1,len(selected_edges)):
