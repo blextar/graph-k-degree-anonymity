@@ -18,12 +18,12 @@ def assignment_cost_additions_deletions(degree_sequence):
     
 # Precompuation of the anonymisation cost, as described in Section 4 of [1]
 # Can be further optimise to consider a smaller range of j
-def anonymisation_cost_precompuation(degree_sequence,k,deletions):
+def anonymisation_cost_precompuation(degree_sequence,k,with_deletions):
     n = len(degree_sequence)
     C = np.full([n,n],np.inf)
     for i in range(n-1):
         for j in range(i+1,n):
-            if deletions:
+            if with_deletions:
                 C[i,j] = assignment_cost_additions_deletions(degree_sequence[i:j+1])
             else:
                 C[i,j] = assignment_cost_additions_only(degree_sequence[i:j+1])
@@ -31,16 +31,16 @@ def anonymisation_cost_precompuation(degree_sequence,k,deletions):
     
 # The dynamic programming algorithm described in Section 4 of [1]
 # Significantly slower than the greedy approach
-def dp_degree_anonymiser(degree_sequence,k,deletions=False):
-    C = anonymisation_cost_precompuation(degree_sequence,k,deletions)
-    cost, anonymised_sequence = dp_degree_anonymiser_recursion(degree_sequence,len(degree_sequence),k,C,deletions)
+def dp_degree_anonymiser(degree_sequence,k,with_deletions=False):
+    C = anonymisation_cost_precompuation(degree_sequence,k,with_deletions)
+    cost, anonymised_sequence = dp_degree_anonymiser_recursion(degree_sequence,len(degree_sequence),k,C,with_deletions)
     return anonymised_sequence
 
 # The dynamic programming algorithm described in Section 4 of [1] - recursion part
-def dp_degree_anonymiser_recursion(degree_sequence,end_idx,k,C,deletions):
+def dp_degree_anonymiser_recursion(degree_sequence,end_idx,k,C,with_deletions):
     n = len(degree_sequence)
     group_degree = degree_sequence[0]
-    if deletions:
+    if with_deletions:
         all_in_one_group_sequence = [np.int(np.median(degree_sequence[0:end_idx]))]*n
     else:
         all_in_one_group_sequence = [group_degree]*n
@@ -54,11 +54,11 @@ def dp_degree_anonymiser_recursion(degree_sequence,end_idx,k,C,deletions):
         # number of recursions optimised according to Eq. 4 in [1]
         # originally: range(k-1,n-k)
         for t in range(np.max([k-1,n-2*k]),n-k):
-            cost, sequence = dp_degree_anonymiser_recursion(degree_sequence[0:t+1],t+1,k,C,deletions)
+            cost, sequence = dp_degree_anonymiser_recursion(degree_sequence[0:t+1],t+1,k,C,with_deletions)
             #cost = cost + assignment_cost_additions_only(degree_sequence[t+1:])
             cost = cost + C[t+1,end_idx-1]
             costs.append(cost)
-            if deletions:
+            if with_deletions:
                 sequences.append(sequence + [np.int(np.median(degree_sequence[t+1:end_idx-1]))]*len(degree_sequence[t+1:]))
             else:
                 sequences.append(sequence + [degree_sequence[t+1]]*len(degree_sequence[t+1:]))
@@ -79,7 +79,7 @@ def dp_degree_anonymiser_with_deletions(degree_sequence,k):
     return anonymised_degree_sequence
 
 # The greedy algorithm described in Section 4 of [1] 
-def greedy_degree_anonymiser(degree_sequence,k):
+def greedy_degree_anonymiser(degree_sequence,k,with_deletions=False):
     # create a k-anonymomus group with all nodes having degree equal to the largest in the group
     # degree_sequence is sorted, so the largest element is the first one
     group_degree = degree_sequence[0]
@@ -290,13 +290,19 @@ def priority(degree_sequence,target_edges):
                 vd[idx] = (vd[idx][0],vd[idx][1] - 1)
 
 # Anonymise G given a value of k. Uses Probing (Algorithm 2 in [1])
-def graph_anonymiser(G,k,with_greedy_anonymisation=False,with_priority=True):
+def graph_anonymiser(G,k,with_greedy_anonymisation=False,with_priority=True,with_deletions=False):
     degree_sequence = get_degree_sequence(G)
     degree_sequence.sort(reverse=True)
+    
+    if with_deletions and with_priority:
+        print("WARNING: we can only consider additions and swaps with priority")
+        print("Setting with_deletions to False")
+        with_deletions = False
+    
     if with_greedy_anonymisation:
-         anonymised_sequence = greedy_degree_anonymiser(degree_sequence,k)
+         anonymised_sequence = greedy_degree_anonymiser(degree_sequence,k,with_deletions)
     else:
-        anonymised_sequence = dp_degree_anonymiser(degree_sequence,k)
+        anonymised_sequence = dp_degree_anonymiser(degree_sequence,k,with_deletions)
     if with_priority:
         Ga = priority(anonymised_sequence,G.edges())
     else:
@@ -308,9 +314,9 @@ def graph_anonymiser(G,k,with_greedy_anonymisation=False,with_priority=True):
         degree_sequence = get_degree_sequence(G)
         degree_sequence.sort(reverse=True)
         if with_greedy_anonymisation:
-            anonymised_sequence = greedy_degree_anonymiser(degree_sequence,k)
+            anonymised_sequence = greedy_degree_anonymiser(degree_sequence,k,with_deletions)
         else:
-            anonymised_sequence = dp_degree_anonymiser(degree_sequence,k)
+            anonymised_sequence = dp_degree_anonymiser(degree_sequence,k,with_deletions)
         if with_priority:
             Ga = priority(anonymised_sequence,G.edges())
         else:
