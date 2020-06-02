@@ -72,9 +72,7 @@ def dp_degree_anonymiser_recursion(degree_sequence,k,C,n,Da,sequences,with_delet
         min_cost_sequence = np.empty(0)
         # number of recursions optimised according to Eq. 4 in [1]
         # originally: range(k-1,n-k)
-        iteration = 1
         for t in range(np.max([k-1,n-2*k]),n-k):
-            iteration = iteration + 1
             # this IF-ELSE is to avoid recomputing cost and sequence for the same value of t more than once
             if Da[t] == np.inf:
                 cost, sequence = dp_degree_anonymiser_recursion(degree_sequence[0:t+1],k,C,t+1,Da,sequences,with_deletions)
@@ -106,6 +104,7 @@ def priority(degree_sequence,original_G):
     vd = [(v,d) for v,d in enumerate(degree_sequence)]
 
     while True:
+        
         # sort the list of pairs by degree (second element in the pair)
         vd.sort(key=lambda tup: tup[1], reverse=True)
         # if we ended up with a negative degree, the degree sequence isn't realisable
