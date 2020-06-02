@@ -52,7 +52,7 @@ def main(argv):
     G = nx.read_edgelist(input_file,nodetype=int)
             
     start = time.time()
-    Ga = kd.graph_anonymiser(G,k=k,algorithm=2,noise=noise,greedy_anonymiser=False)
+    Ga = kd.graph_anonymiser(G,k=k,noise=noise,with_deletions=True)
     print("Total execution time =",time.time()-start)
 
     H = nx.intersection(G,Ga)
