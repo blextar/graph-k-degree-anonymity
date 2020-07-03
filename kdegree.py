@@ -169,7 +169,7 @@ def probing(dv,noise):
     return dv
 
 # Anonymise G given a value of k using DP degree anonymiser, PRIORITY, and PROBING (edge removals: optional)
-def graph_anonymiser(G,k,noise=1,with_deletions=False):
+def graph_anonymiser(G,k,noise=10,with_deletions=False):
     
     dv = [(d,v) for v, d in G.degree()]
     degree_sequence,permutation = sort_dv(dv)
